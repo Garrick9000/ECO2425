@@ -3,7 +3,11 @@ Script for ECO 2425 Project 1
 
 I read the data files directly from the replication package
 the 'pulse_w2845'. The data can be found in the replication package
-here: https://doi.org/10.1257/pandp.20231088
+here: 
+
+Parolin, Z., Ananat, E., Collyer, S., Curran, M., & Wimer, C. (2023). 
+The Effects of the Monthly and Lump-Sum Child Tax Credit Payments on Food and Housing Hardship. 
+AEA Papers and Proceedings, 113, 406-412. https://doi.org/10.1257/pandp.20231088.
 
 Earliest Date: April 14 – April 26 2021 #Week 28
 Latest Date: April 27 – May 9, 2022 #Week 45
