@@ -643,7 +643,7 @@ pulse['post2'] = np.where(pulse['week'].isin([43,
                                               45]), 1, pulse['post2'])
 
 
-#Where there was partial Payment
+#Where there was Partial payment
 pulse['partial'] = 0
 pulse['partial'] = np.where(pulse['week'].isin([41,
                                                 42]), 1, pulse['partial'])
@@ -663,7 +663,7 @@ pulse['pre'] = np.where(pulse['week'].isin([28,
 pulse = pulse[pulse['ms'] >= 1]
 
 #Creating a dummy for if the person is unmarried or not
-#If umarried than 1, else 0
+#If unmarried then 1, else 0
 pulse['unmarried'] = np.where(pulse['ms'].isin([2,3,4,5]),
                               1,
                               0)
@@ -705,7 +705,7 @@ other_vars = [
 ##Keep only the variables used in the analysis
 pulse_foodhardship = pulse[[
                 'p_foodhardship',  #Dependent variable
-                'pweight',
+                'pweight', #population weight
                 ] + 
                 other_vars +
                 controls]
@@ -734,7 +734,7 @@ pulse_mod = pulse[['week',
                    'unmarried'
                    ]]
 
-#Make a list of the items we will be doing summary statistics on on
+#Make a list of the items we will be doing summary statistics on
 sumstats = list(pulse_mod.columns.values)
 sumstats.remove('week')
 sumstats.remove('pweight')
@@ -991,7 +991,7 @@ figure_dates = pd.DataFrame(pd.date_range(figure1['mid_week'].min(),figure1['mid
 figure_dates = figure_dates.rename(columns = {0 : 'Date'})
 
 #The authors defined monthly payments from July 21 - Dec 13
-#And lump-sum payments from March 2 - April 11
+#And lump-sum payments from March 2 - April 22
 figure_dates['Treatment_dates'] = 0
 
 #Monthly CTC start
@@ -1104,6 +1104,7 @@ nx.draw(
     pos = layout
 )
 
+#Now to do the DAG for the estimation
 gml_graph_full = """graph [
 directed 1
 
@@ -1671,7 +1672,7 @@ lambdas = 10**np.linspace(8, -2, 100) / Y.std()
 
 
 
-# Logistic regressions has a regularization strnegth being the inverse of C
+# Logistic regressions has a regularization strength being the inverse of C
 C_values = 1 / lambdas
 
 # Creating a dataframe of zeroes. Rows are the amount of C values (or)
