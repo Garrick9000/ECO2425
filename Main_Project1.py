@@ -658,7 +658,7 @@ pulse['pre'] = np.where(pulse['week'].isin([28,
                                             33]), 1, pulse['pre'])
 
 
-#Marital status, this is where I code in Married. It wasn't included originally
+#Marital status, this is where I code in Unmarried. It wasn't included originally
 #Keep only the non-missing values. Anything 1 and above the survey respondent answer normally
 pulse = pulse[pulse['ms'] >= 1]
 
@@ -696,7 +696,7 @@ controls = ['net_eitc_1000',
             'week'
             ]
 
-#Vars that I separate out because these are treated different depending on the model...
+#My variables of interest
 other_vars = [
     'ctc_treatment_01_post2', #Parameter of interest in DD
     'ctc_treatment_01_post1',#Parameter of interest in DD
@@ -739,6 +739,7 @@ sumstats = list(pulse_mod.columns.values)
 sumstats.remove('week')
 sumstats.remove('pweight')
 
+#Creating a dataframe for summary statistics
 pulse_desc = pd.DataFrame(index = ["mean", "sd", "median","min","max"])
 for variable in sumstats:
     #Create a temporary df to drop any observations if there is an na.
@@ -850,7 +851,7 @@ print(latex_output_dd)
 #First keep only whatever variables are necessary
 pulse_foodhardship_fig1 = pulse_foodhardship[['p_foodhardship','pweight','ctc_treatment_01','week']]
 
-##Dataframe for parents
+##Dataframe for parents (Households with children)
 pulse_foodhardship_fig1_parents = pulse_foodhardship_fig1[
     pulse_foodhardship_fig1['ctc_treatment_01'] == 1].reset_index(drop = True)
 
@@ -866,7 +867,7 @@ pulse_foodhardship_fig1_parents_mean = pd.DataFrame(
 pulse_foodhardship_fig1_parents_mean = pulse_foodhardship_fig1_parents_mean.rename(
     columns = {0 : 'Children present in household'})
 
-#Dataframe for non-parents
+#Dataframe for non-parents (Households without Children)
 pulse_foodhardship_fig1_noparents = pulse_foodhardship_fig1[
     pulse_foodhardship_fig1['ctc_treatment_01'] == 0].reset_index(drop = True)
 
@@ -1518,6 +1519,7 @@ estimate = model.estimate_effect(
 
 print(estimate)
 
+#Refuting
 refute_subset = model.refute_estimate(
 estimand=estimand,
 estimate=estimate,
@@ -1588,6 +1590,7 @@ ml_data = ml_data.rename(columns = {
 #The full dataset is to cumbersome for my device to run so I will use the subsample
 model = MS(ml_data.columns.drop(['Food Hardship','pweight']), intercept=False)
 
+#Use code from class
 D = model.fit_transform(ml_data)
 feature_names = list(D.columns)
 X = np.asarray(D)
@@ -1595,7 +1598,7 @@ X = np.asarray(D)
 Y = np.array(ml_data['Food Hardship'])
 
 #Want to extract the weights by itself... Useful when this is split
-#Into training and testing...
+#Into training and testing.
 weight = np.asarray(ml_data['pweight'])
 
 ##Split data into training and test set. 50/50.
@@ -1614,7 +1617,7 @@ weight = np.asarray(ml_data['pweight'])
 
 #%%%Regression Tree----------------------------------------------------------
 
-#Define the classifier tree
+#Define the classifier tree, code like in class
 clf = DTC(criterion='entropy',
           max_depth=3,
           random_state=0) 
@@ -1636,7 +1639,7 @@ print(export_text(clf,
 
 #Using the subsample
 
-#Including the state fixed effects and time fixed effects
+#Including the state fixed effects and time fixed effects, code like in class
 foodhardship_RFC_fit_full = RFC(max_features = "sqrt",
                            random_state = 0).fit(X,Y, sample_weight = weight) 
 
@@ -1735,7 +1738,7 @@ ax.set_ylabel('Standardized coefficients', fontsize=20)
 ax.legend(loc='upper left');
 
 
-#Cross-Validate the MSEs
+#Cross-Validate (similar to code in class, but with modifications for binary)
 
 #Creating a dictionary
 param_grid = {'ridge__C': 1 / lambdas}
