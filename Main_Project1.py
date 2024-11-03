@@ -57,7 +57,7 @@ from sklearn.ensemble import \
      (RandomForestClassifier as RFC)
 from dowhy import CausalModel
 import networkx as nx
-
+from stargazer.stargazer import Stargazer
 
 #%%% Preliminaries
 #Change the file paths appropriate
@@ -710,9 +710,11 @@ other_vars = [
 pulse_foodhardship = pulse[[
                 'p_foodhardship',  #Dependent variable
                 'pweight', #population weight
+                'rhispanic',
+                'rrace'
                 ] + 
                 other_vars +
-                controls]
+                controls] #Separate by Hispanic and Non-Hispanic
 
 #Drop nas in the dataset
 pulse_foodhardship = pulse_foodhardship.dropna()
@@ -721,103 +723,159 @@ pulse_foodhardship = pulse_foodhardship.dropna()
 pulse_foodhardship = pulse_foodhardship.astype({'statefips' : 'category',
                                               'week' : 'category'})
 
+#Indicating which is Hispanic vs non-hispanic
+hispanic_dict = {
+    1 : "Non-Hispanic",
+    2 : "Hispanic"
+    }
+#Race of the household head
+race_dict = {
+    1 : "White",
+    2 : "Black",
+    3 : "Asian",
+    4 : "Other races"}
+
+#Replacing the names
+pulse_foodhardship['rhispanic'].replace(hispanic_dict,inplace=True)
+pulse_foodhardship['rrace'].replace(race_dict,inplace=True)
+
+#Make a new column, Hispanic if they identify as hispanic. Non-hispanic otherwise.
+pulse_foodhardship['race'] = np.where(pulse_foodhardship['rhispanic'] == 'Hispanic',
+                                      "Hispanic",
+                                      pulse_foodhardship['rrace'])
+
+
 #%%%Summary Statistics----------------------------------------------------------
 
-#Creating a modified (mod) dataframe 
-pulse_mod = pulse[['week',
+#Creating a modified (mod) dataframe just for summary statistics
+pulse_mod = pulse_foodhardship[[
                    'pweight',
                    'p_foodhardship',
                    'ctc_treatment_01',
-                   'net_ctc_monthly',
-                   'net_ctc_lumpsum',
-                   'net_eitc',
+                   'net_eitc_1000',
                    'age',
                    'v_female',
                    'edu_college',
                    'edu_nohs',
-                   'unmarried'
+                   'unmarried',
+                   'race'
                    ]]
 
-#Make a list of the items we will be doing summary statistics on
-sumstats = list(pulse_mod.columns.values)
-sumstats.remove('week')
-sumstats.remove('pweight')
 
-#Creating a dataframe for summary statistics
-pulse_desc = pd.DataFrame(index = ["mean", "sd", "median","min","max"])
-for variable in sumstats:
-    #Create a temporary df to drop any observations if there is an na.
-    tempdf = pulse_mod[['pweight',variable]].dropna().reset_index(drop=True)
-    #Calculate mean,sd,median,min and max
-    pulse_mean = np.average(tempdf[variable], weights = tempdf['pweight'])
-    pulse_sd = (np.cov(tempdf[variable], aweights = tempdf['pweight']))**.5
-    pulse_median = np.median(tempdf[variable])
-    pulse_min = np.min(tempdf[variable])
-    pulse_max = np.max(tempdf[variable])
-    #Put all the statistics in a dictionary and creating a Dataframe
-    tempDict = {"mean" : pulse_mean,
-                "sd" : pulse_sd,
-                "median": pulse_median,
-                "min": pulse_min,
-                "max": pulse_max
-                }
-    #Cleaning and merging into one dataframe
-    tempdf2 = pd.DataFrame(tempDict, index = [0])
-    tempdf2 = np.transpose(tempdf2)
-    tempdf2 = tempdf2.rename(columns = {0 : variable})
-    pulse_desc= pd.merge(pulse_desc,tempdf2,left_index = True, right_index = True)
+pulse_mod['net_eitc'] = pulse_mod['net_eitc_1000']*1000 #Multiply by 1000 again
+pulse_mod['ctc_treatment_01'] = np.where(pulse_mod['ctc_treatment_01'] == 1,
+                     'Child in household',
+                     'Child not in household') #Renaming ctc_treatment_1000
 
+pulse_mod['Hispanic'] = np.where(pulse_mod['race'] == 'Hispanic',
+                                 1,
+                                 0)
 
-#Rename the columns
-pulse_desc = pulse_desc.rename(
-    columns = {
-        "p_foodhardship" : "Food hardship",
-        "ctc_treatment_01" : "Children in HH (Binary)",
-        "net_ctc_monthly" : "Net CTC monthly payment",
-        "net_ctc_lumpsum" : "Net CTC lump sum payment",
-        "net_eitc" : "Net EITC",
-        "age" : "Age",
-        "v_female" : "Female",
-        "edu_college" : "College degree",
-        "edu_nohs" : "No highschool degree",
-        "unmarried" : "Unmarried"
-        }).reset_index()
+pulse_mod['Black'] = np.where(pulse_mod['race'] == 'Black',
+                                 1,
+                                 0)
 
-#Transpose the dataframe to put in table format
-pulse_desc = np.transpose(pulse_desc).reset_index()
+pulse_mod['Other'] = np.where(pulse_mod['race'].isin(['White','Asian','Other races']),
+                                 1,
+                                 0)
 
-#Make first row into the column names
-pulse_desc.columns = pulse_desc.iloc[0]
-
-#Drop the first row because it contains index, mean, etc... Want it gone for table
-pulse_desc = pulse_desc.iloc[1:]
+# Group by treated vs control group
+summary = pulse_mod.groupby(['ctc_treatment_01']).apply(
+    (lambda x:  pd.Series({'Food hardship' : np.average(x['p_foodhardship'], weights=x['pweight']),
+                           'Female' : np.average(x['v_female'], weights=x['pweight']),
+                           'College educated' : np.average(x['edu_college'], weights=x['pweight']),
+                           'No highschool' : np.average(x['edu_nohs'], weights=x['pweight']),
+                           'Unmarried' : np.average(x['unmarried'], weights=x['pweight']),
+                           'Hispanic' : np.average(x['Hispanic'], weights=x['pweight']),
+                           'Black' : np.average(x['Black'], weights=x['pweight']),
+                           'Other races' : np.average(x['Other'], weights=x['pweight']),
+                           'Age' : np.average(x['age'], weights=x['pweight']),
+                           'Net EITC' : np.average(x['net_eitc'], weights=x['pweight'])
+                           })))
 
 
-pulse_desc = pulse_desc.rename(
-    columns = {
-        "index" : "Statistic",
-        "mean" : "Mean",
-        "sd" : "St. Dev.",
-        "median" : "Median",
-        "min" : "Min",
-        "max" : "Max",
-        })
+# Calculate overall statistics
+summary_overall = pd.Series({
+   'Food hardship' : np.average(pulse_mod['p_foodhardship'], weights = pulse_mod['pweight']),
+   'Female' : np.average(pulse_mod['v_female'], weights = pulse_mod['pweight']),
+   'College educated' : np.average(pulse_mod['edu_college'], weights = pulse_mod['pweight']),
+   'No highschool' : np.average(pulse_mod['edu_nohs'], weights = pulse_mod['pweight']),
+   'Unmarried' : np.average(pulse_mod['unmarried'], weights = pulse_mod['pweight']),
+   'Hispanic' : np.average(pulse_mod['Hispanic'], weights = pulse_mod['pweight']),
+   'Black' : np.average(pulse_mod['Black'], weights = pulse_mod['pweight']),
+   'Other races' : np.average(pulse_mod['Other'], weights = pulse_mod['pweight']),
+   'Age' : np.average(pulse_mod['age'], weights = pulse_mod['pweight']),
+   'Net EITC' : np.average(pulse_mod['net_eitc'], weights = pulse_mod['pweight'])
+    }).reset_index()
 
-#Select columns for converting to numeric
-stats = ["Mean", "St. Dev.", "Median", "Min", "Max"]
+#Make it into the same format as the summary dataframe
+summary_overall = summary_overall.pivot_table(columns = 'index')
+summary_overall = summary_overall.rename(index = {0 : 'All households'})
 
-#Convert all stats into numeric
-for col in stats:
-    pulse_desc[col] = pd.to_numeric(pulse_desc[col], errors='coerce')
 
-#Round all values to two decimal places
-pulse_desc = np.round(pulse_desc, decimals=2)
+# Concat the two dataframes
+summary_full = pd.concat([summary, summary_overall])
 
-#Print how many observations that were used in the summary stats
-print(tempdf.shape[0])
+#Multiplying to convert to percentages and round
+summary_full['Food hardship'] = (summary_full['Food hardship']*100).round(2)
+summary_full['Female'] = (summary_full['Female']*100).round(2)
+summary_full['College educated'] = (summary_full['College educated']*100).round(2)
+summary_full['No highschool'] = (summary_full['No highschool']*100).round(2)
+summary_full['Unmarried'] = (summary_full['Unmarried']*100).round(2)
+summary_full['Hispanic'] = (summary_full['Hispanic']*100).round(2)
+summary_full['Black'] = (summary_full['Black']*100).round(2)
+summary_full['Other races'] = (summary_full['Other races']*100).round(2)
+summary_full['Age'] = (summary_full['Age']).round(2)
+summary_full['Net EITC'] = (summary_full['Net EITC']).round(2)
 
-#Convert the dataframe to latex format
-print(pulse_desc.to_latex(index=False, float_format="%.2f"))
+
+# Reset index
+summary_full.reset_index(inplace=True)
+
+# Reformat the DataFrame to have groups as rows
+summary_melt = summary_full.melt(id_vars='index', 
+                               value_vars=['Food hardship',
+                                           'Female',
+                                           'College educated',
+                                           'No highschool',
+                                           'Unmarried',
+                                           'Hispanic',
+                                           'Black',
+                                           'Other races',
+                                           'Age',
+                                           'Net EITC'], 
+                               var_name='Mean', 
+                               value_name='Value')
+
+# Pivot the table
+summary_pivot = summary_melt.pivot(index='Mean', columns='index', values='Value')
+
+
+
+# Export to LaTeX
+latex_table = summary_pivot.to_latex(
+    index=True,
+    float_format="%.2f",
+    header=['All households', 'Child in household' , 'Child not in household'],
+    column_format="l c c c", 
+    escape=False
+)
+
+#Print the Latex Code
+print(latex_table)
+
+#Count the number of observations
+obs = len(pulse_mod)
+
+#Count the number of observations with children
+pulse_mod_children = pulse_mod[pulse_mod['ctc_treatment_01'] == 'Child in household']
+
+obs_children = len(pulse_mod_children)
+
+#Count the number of observations without children
+obs_nochildren = obs - obs_children
+
+print(obs, obs_children, obs_nochildren)
 
 
 #%%%  Dif-in-Dif model set-up---------------------------------------------------------
@@ -826,32 +884,129 @@ print(pulse_desc.to_latex(index=False, float_format="%.2f"))
 formula_dif_dif = ("p_foodhardship ~ ctc_treatment_01_post1 + ctc_treatment_01_post2 + "  + ' + '.join(controls))
 
 
-#%%%  WLS regressions---------------------------------------------------------
+#%%%  Regressions---------------------------------------------------------
 
-# WLS for the dif-in-dif model
-model_wls_dd = smf.wls(formula_dif_dif, data=pulse_foodhardship, weights=pulse_foodhardship['pweight'])
-results_wls_dd = model_wls_dd.fit(cov_type='HC3', cluster=pulse_foodhardship['statefips'])
+#Separating out Hispanic
+pulse_foodhardship_hispanic = pulse_foodhardship[pulse_foodhardship['race'] == 'Hispanic']
 
-#Furthermore I will subsample to run my machine learning models
+#Separating out Non-Hispanic Black
+pulse_foodhardship_black = pulse_foodhardship[
+    (pulse_foodhardship['race'] == 'Black') ]
+
+#Separating out Non-hispanic White, Asian and Other
+pulse_foodhardship_other = pulse_foodhardship[
+    pulse_foodhardship['race'].isin(['White', 'Asian', 'Other'])]
+
+#I will subsample to run my machine learning models that is using the whole population
 #This will take a subsample of each combination of week and state of about 250 each
 pulse_foodhardship_sub = pulse_foodhardship.groupby(['week','statefips']).apply(lambda x: x.sample(n=250, random_state=1000)).reset_index(drop=True)
 
-#Running the subsample regression
-model_wls_dd_sub = smf.wls(formula_dif_dif, data=pulse_foodhardship_sub, weights=pulse_foodhardship_sub['pweight'])
-results_wls_dd_sub = model_wls_dd_sub.fit(cov_type='HC3', cluster=pulse_foodhardship_sub['statefips'])
+######## OLS ############
 
-#Summarizing it for latex
-latex_output_dd = summary_col([results_wls_dd,results_wls_dd_sub],
-                              stars=True,float_format='%0.3f',
-                              model_names = ['Food hardship \n (1)', 'Food hardship \n (2)']).as_latex()
-#Output Latex code
-print(latex_output_dd)
+# OLS for the entire sample
+model_ols = smf.ols(formula_dif_dif, data=pulse_foodhardship)
+results_ols = model_ols.fit(cov_type='HC3', cluster=pulse_foodhardship['statefips'])
+
+# OLS for the subsample
+model_ols_sub = smf.ols(formula_dif_dif, data=pulse_foodhardship_sub)
+results_ols_sub = model_ols_sub.fit(cov_type='HC3', cluster=pulse_foodhardship_sub['statefips'])
+
+# OLS for the Hispanic
+model_ols_hispanic = smf.ols(formula_dif_dif, data=pulse_foodhardship_hispanic)
+results_ols_hispanic = model_ols_hispanic.fit(cov_type='HC3', cluster=pulse_foodhardship_hispanic['statefips'])
+
+# OLS for the Non-Hispanic Black
+model_ols_black = smf.ols(formula_dif_dif, data=pulse_foodhardship_black)
+results_ols_black = model_ols_black.fit(cov_type='HC3', cluster=pulse_foodhardship_black['statefips'])
+
+# OLS for the other races
+model_ols_other = smf.ols(formula_dif_dif, data=pulse_foodhardship_other)
+results_ols_other = model_ols_other.fit(cov_type='HC3', cluster=pulse_foodhardship_other['statefips'])
+
+
+# Stargazer
+ols_table = Stargazer([results_ols,
+                       results_ols_sub,
+                       results_ols_hispanic, 
+                       results_ols_black,
+                       results_ols_other])
+#Rename the columns
+ols_table.custom_columns(['All', 
+                         'All(subsample)', 
+                         'Hispanic',
+                         'Black',
+                         'Other'], [1, 1, 1, 1, 1])
+
+#Rename the variables of interest
+ols_table.rename_covariates({'ctc_treatment_01_post1' : 'Monthly Payments',
+                             'ctc_treatment_01_post2' : 'Lump-sum Payments' })
+
+# Rename the dependent variable
+ols_table.dependent_variable_name("Food hardship")
+
+#Make to Latex
+ols_latex = ols_table.render_latex()
+
+#Print it out
+print(ols_latex)
+
+
+######## WLS ############
+
+# wls for the entire sample
+model_wls = smf.wls(formula_dif_dif, data=pulse_foodhardship, weights=pulse_foodhardship['pweight'])
+results_wls = model_wls.fit(cov_type='HC3', cluster=pulse_foodhardship['statefips'])
+
+# wls for the subsample
+model_wls_sub = smf.wls(formula_dif_dif, data=pulse_foodhardship_sub, weights=pulse_foodhardship_sub['pweight'])
+results_wls_sub = model_wls_sub.fit(cov_type='HC3', cluster=pulse_foodhardship_sub['statefips'])
+
+# wls for the Hispanic
+model_wls_hispanic = smf.wls(formula_dif_dif, data=pulse_foodhardship_hispanic, weights=pulse_foodhardship_hispanic['pweight'])
+results_wls_hispanic = model_wls_hispanic.fit(cov_type='HC3', cluster=pulse_foodhardship_hispanic['statefips'])
+
+# wls for the Non-Hispanic Black
+model_wls_black = smf.wls(formula_dif_dif, data=pulse_foodhardship_black, weights=pulse_foodhardship_black['pweight'])
+results_wls_black = model_wls_black.fit(cov_type='HC3', cluster=pulse_foodhardship_black['statefips'])
+
+# wls for the other races
+model_wls_other = smf.wls(formula_dif_dif, data=pulse_foodhardship_other, weights=pulse_foodhardship_other['pweight'])
+results_wls_other = model_wls_other.fit(cov_type='HC3', cluster=pulse_foodhardship_other['statefips'])
+
+
+# Stargazer
+wls_table = Stargazer([results_wls,
+                       results_wls_sub,
+                       results_wls_hispanic, 
+                       results_wls_black,
+                       results_wls_other])
+
+#Rename the columns
+wls_table.custom_columns(['All', 
+                         'All', #Subsample 
+                         'Hispanic',
+                         'Black',
+                         'Other'], [1, 1, 1, 1, 1])
+
+#Rename the variables of interest
+wls_table.rename_covariates({'ctc_treatment_01_post1' : 'Monthly Payments',
+                             'ctc_treatment_01_post2' : 'Lump-sum Payments' })
+
+# Rename the dependent variable
+wls_table.dependent_variable_name("Food hardship")
+
+#Make to Latex
+wls_latex = wls_table.render_latex()
+
+#Print
+print(wls_latex)
 
 
 #%%% Figures Proof of Parallel Trends---------------------------------------------------------
 
 ####Figure for the parallel trend assumption for households with children vs no children
 
+###### All races and ethnicities ######
 #First keep only whatever variables are necessary
 pulse_foodhardship_fig1 = pulse_foodhardship[['p_foodhardship','pweight','ctc_treatment_01','week']]
 
@@ -931,6 +1086,89 @@ pulse_foodhardship_fig2_noparents_mean = pulse_foodhardship_fig2_noparents_mean.
 #Merge the two to create one dataframe
 figure2 = pd.merge(pulse_foodhardship_fig2_parents_mean, pulse_foodhardship_fig2_noparents_mean)
 
+######## Hispanic ########
+#First keep only whatever variables are necessary
+pulse_foodhardship_fig3 = pulse_foodhardship_hispanic[['p_foodhardship','pweight','ctc_treatment_01','week']]
+
+##Dataframe for parents (Households with children)
+pulse_foodhardship_fig3_parents = pulse_foodhardship_fig3[
+    pulse_foodhardship_fig3['ctc_treatment_01'] == 1].reset_index(drop = True)
+
+#Calculate the mean of each period for parents
+pulse_foodhardship_fig3_parents_mean = pulse_foodhardship_fig3_parents.groupby(['week']).apply(
+    lambda x: np.average(x['p_foodhardship'], weights=x['pweight']))
+
+#Convert to a dataframe
+pulse_foodhardship_fig3_parents_mean = pd.DataFrame(
+    pulse_foodhardship_fig3_parents_mean).reset_index()
+
+#Rename column
+pulse_foodhardship_fig3_parents_mean = pulse_foodhardship_fig3_parents_mean.rename(
+    columns = {0 : 'Children present in household'})
+
+#Dataframe for non-parents (Households without Children)
+pulse_foodhardship_fig3_noparents = pulse_foodhardship_fig3[
+    pulse_foodhardship_fig3['ctc_treatment_01'] == 0].reset_index(drop = True)
+
+#Calculate the mean of each period for non-parents
+pulse_foodhardship_fig3_noparents_mean = pulse_foodhardship_fig3_noparents.groupby(['week']).apply(
+    lambda x: np.average(x['p_foodhardship'], weights=x['pweight']))
+
+
+#Convert to a dataframe
+pulse_foodhardship_fig3_noparents_mean = pd.DataFrame(
+   pulse_foodhardship_fig3_noparents_mean).reset_index()
+
+#Rename column
+pulse_foodhardship_fig3_noparents_mean = pulse_foodhardship_fig3_noparents_mean.rename(
+    columns = {0 : 'Children not present in household'})
+
+#Merge the two to create one dataframe
+figure3 = pd.merge(pulse_foodhardship_fig3_parents_mean, pulse_foodhardship_fig3_noparents_mean)
+
+######## Black ########
+
+#First keep only whatever variables are necessary
+pulse_foodhardship_fig4 = pulse_foodhardship_black[['p_foodhardship','pweight','ctc_treatment_01','week']]
+
+##Dataframe for parents (Households with children)
+pulse_foodhardship_fig4_parents = pulse_foodhardship_fig4[
+    pulse_foodhardship_fig4['ctc_treatment_01'] == 1].reset_index(drop = True)
+
+#Calculate the mean of each period for parents
+pulse_foodhardship_fig4_parents_mean = pulse_foodhardship_fig4_parents.groupby(['week']).apply(
+    lambda x: np.average(x['p_foodhardship'], weights=x['pweight']))
+
+#Convert to a dataframe
+pulse_foodhardship_fig4_parents_mean = pd.DataFrame(
+    pulse_foodhardship_fig4_parents_mean).reset_index()
+
+#Rename column
+pulse_foodhardship_fig4_parents_mean = pulse_foodhardship_fig4_parents_mean.rename(
+    columns = {0 : 'Children present in household'})
+
+#Dataframe for non-parents (Households without Children)
+pulse_foodhardship_fig4_noparents = pulse_foodhardship_fig4[
+    pulse_foodhardship_fig4['ctc_treatment_01'] == 0].reset_index(drop = True)
+
+#Calculate the mean of each period for non-parents
+pulse_foodhardship_fig4_noparents_mean = pulse_foodhardship_fig4_noparents.groupby(['week']).apply(
+    lambda x: np.average(x['p_foodhardship'], weights=x['pweight']))
+
+
+#Convert to a dataframe
+pulse_foodhardship_fig4_noparents_mean = pd.DataFrame(
+   pulse_foodhardship_fig4_noparents_mean).reset_index()
+
+#Rename column
+pulse_foodhardship_fig4_noparents_mean = pulse_foodhardship_fig4_noparents_mean.rename(
+    columns = {0 : 'Children not present in household'})
+
+#Merge the two to create one dataframe
+figure4 = pd.merge(pulse_foodhardship_fig4_parents_mean, pulse_foodhardship_fig4_noparents_mean)
+
+
+
 #Now I want to map the weeks to the dates of the surveys
 #This list here is for reference.
 '''
@@ -988,6 +1226,16 @@ figure2['mid_week'] = figure2['week'].astype(str)
 figure2['mid_week'].replace(week_dict,inplace=True)
 figure2['mid_week'] = pd.to_datetime(figure2['mid_week'], format = "%Y-%m-%d")
 
+#Figure 3
+figure3['mid_week'] = figure3['week'].astype(str)
+figure3['mid_week'].replace(week_dict,inplace=True)
+figure3['mid_week'] = pd.to_datetime(figure3['mid_week'], format = "%Y-%m-%d")
+
+#Figure 4
+figure4['mid_week'] = figure4['week'].astype(str)
+figure4['mid_week'].replace(week_dict,inplace=True)
+figure4['mid_week'] = pd.to_datetime(figure4['mid_week'], format = "%Y-%m-%d")
+
 #Create the daily date range... This is to help formatting in excel
 figure_dates = pd.DataFrame(pd.date_range(figure1['mid_week'].min(),figure1['mid_week'].max(),freq='d'))
 
@@ -1027,9 +1275,11 @@ figure_dates['Treatment_dates'] = np.where(figure_dates['Date'] == '2022-04-22',
 file = "C:/Users/Owner/Desktop/UofT Classes/ECO2425/Project/Work/Results/"
 
 #Write to excel files
-with pd.ExcelWriter(file + "Figure1_2_extra.xlsx") as writer:
-    figure1.to_excel(writer, sheet_name="Figure1", index=False)
-    figure2.to_excel(writer, sheet_name="Figure2", index=False)
+with pd.ExcelWriter(file + "Parallel_trend_charts.xlsx") as writer:
+    figure1.to_excel(writer, sheet_name="All", index=False)
+    figure2.to_excel(writer, sheet_name="Subsample", index=False)
+    figure3.to_excel(writer, sheet_name="Hispanic", index=False)
+    figure4.to_excel(writer, sheet_name="Black", index=False)
     figure_dates.to_excel(writer, sheet_name="Daily_dates", index=False)
 
 #Once I export the data to Excel I make the charts in Excel.
@@ -1522,17 +1772,14 @@ estimate = model.estimate_effect(
     identified_estimand=estimand,
     method_name="backdoor.linear_regression")
 
-print(estimate)
-
 #Refuting
 refute_subset = model.refute_estimate(
 estimand=estimand,
 estimate=estimate,
 method_name="data_subset_refuter",
-subset_fraction=0.5)
+subset_fraction=0.5,
+random_seed = 1000)
 
-
-print(refute_subset)
 
 
 ##### Now for the Lumpsum payments
@@ -1552,21 +1799,148 @@ estimate2 = model2.estimate_effect(
     identified_estimand=estimand2,
     method_name="backdoor.linear_regression")
 
-print(estimate2)
-
+#Refute
 refute_subset2 = model.refute_estimate(
 estimand=estimand2,
 estimate=estimate2,
 method_name="data_subset_refuter",
-subset_fraction=0.5)
+subset_fraction=0.5,
+random_seed = 1000)
+
+#Hispanic
+
+######Monthly payments
+
+model_hispanic_monthly = CausalModel(
+    data=pulse_foodhardship_hispanic,
+    treatment='ctc_treatment_01_post1', 
+    outcome= 'p_foodhardship', 
+    graph = gml_graph_full
+    )
+
+#Identifying the relationships 
+estimand_hispanic_monthly = model_hispanic_monthly.identify_effect()
 
 
+#Doing the estimate
+estimate_hispanic_monthly = model_hispanic_monthly.estimate_effect(
+    identified_estimand=estimand_hispanic_monthly,
+    method_name="backdoor.linear_regression")
+
+#Refuting
+refute_subset_hispanic_monthly = model_hispanic_monthly.refute_estimate(
+estimand=estimand_hispanic_monthly,
+estimate=estimate_hispanic_monthly,
+method_name="data_subset_refuter",
+subset_fraction=0.5,
+random_seed = 1000)
+
+
+
+##### Now for the Lumpsum payments
+model_hispanic_lumpsum = CausalModel(
+    data=pulse_foodhardship_hispanic,
+    treatment='ctc_treatment_01_post2', 
+    outcome= 'p_foodhardship', 
+    graph = gml_graph_full
+    )
+
+#Identifying the relationships 
+estimand_hispanic_lumpsum = model_hispanic_lumpsum.identify_effect()
+
+
+#Doing the estimate
+estimate_hispanic_lumpsum = model_hispanic_lumpsum.estimate_effect(
+    identified_estimand=estimand_hispanic_lumpsum,
+    method_name="backdoor.linear_regression")
+
+#Refute
+refute_subset_hispanic_lumpsum = model_hispanic_lumpsum.refute_estimate(
+estimand=estimand_hispanic_lumpsum,
+estimate=estimate_hispanic_lumpsum,
+method_name="data_subset_refuter",
+subset_fraction=0.5,
+random_seed = 1000)
+
+#Black
+
+######Monthly payments
+
+model_black_monthly = CausalModel(
+    data=pulse_foodhardship_black,
+    treatment='ctc_treatment_01_post1', 
+    outcome= 'p_foodhardship', 
+    graph = gml_graph_full
+    )
+
+#Identifying the relationships 
+estimand_black_monthly = model_black_monthly.identify_effect()
+
+
+#Doing the estimate
+estimate_black_monthly = model_black_monthly.estimate_effect(
+    identified_estimand=estimand_black_monthly,
+    method_name="backdoor.linear_regression")
+
+#Refuting
+refute_subset_black_monthly = model_black_monthly.refute_estimate(
+estimand=estimand_black_monthly,
+estimate=estimate_black_monthly,
+method_name="data_subset_refuter",
+subset_fraction=0.5,
+random_seed = 1000)
+
+
+
+##### Now for the Lumpsum payments
+model_black_lumpsum = CausalModel(
+    data=pulse_foodhardship_black,
+    treatment='ctc_treatment_01_post2', 
+    outcome= 'p_foodhardship', 
+    graph = gml_graph_full
+    )
+
+#Identifying the relationships 
+estimand_black_lumpsum = model_black_lumpsum.identify_effect()
+
+
+#Doing the estimate
+estimate_black_lumpsum = model_black_lumpsum.estimate_effect(
+    identified_estimand=estimand_black_lumpsum,
+    method_name="backdoor.linear_regression")
+
+#Refute
+refute_subset_black_lumpsum = model_black_lumpsum.refute_estimate(
+estimand=estimand_black_lumpsum,
+estimate=estimate_black_lumpsum,
+method_name="data_subset_refuter",
+subset_fraction=0.5,
+random_seed = 1000)
+
+
+
+
+#Print all the results
+# All
+print(refute_subset)
 print(refute_subset2)
+# Hispanic
+print(refute_subset_hispanic_monthly)
+print(refute_subset_hispanic_lumpsum)
+
+# Black
+print(refute_subset_black_monthly)
+print(refute_subset_black_lumpsum)
+
+
 
 #%%%Machine Learning Setup (excluding DAG)----------------------------------------------------------
 
-#Create a new dataframe from this section onwards
+#Create a new dataframe from this section onwards.
 ml_data = pulse_foodhardship_sub
+
+#I want to do it for all races and ethnicities so drop the unecessary columns
+ml_data = ml_data.drop(columns=['rhispanic','rrace','race'], axis=1)
 
 ml_data = ml_data.rename(columns = {
     "p_foodhardship" : "Food Hardship",
@@ -1624,13 +1998,13 @@ weight = np.asarray(ml_data['pweight'])
 
 #Define the classifier tree, code like in class
 clf = DTC(criterion='entropy',
-          max_depth=3,
-          random_state=0) 
+          max_depth=2,
+          random_state=10) 
        
 #Fit using the subsample
 clf.fit(X, Y, sample_weight=weight)
 
-ax = subplots(figsize=(100,50))[1]
+ax = subplots(figsize=(50,25))[1]
 plot_tree(clf,
           feature_names=feature_names,
           ax=ax,
@@ -1646,7 +2020,7 @@ print(export_text(clf,
 
 #Including the state fixed effects and time fixed effects, code like in class
 foodhardship_RFC_fit_full = RFC(max_features = "sqrt",
-                           random_state = 0).fit(X,Y, sample_weight = weight) 
+                           random_state = 10).fit(X,Y, sample_weight = weight) 
 
 #Importance table.
 feature_imp = pd.DataFrame(
