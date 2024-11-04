@@ -2079,14 +2079,8 @@ soln_path
 
 #Keep only the main variables of interest
 soln_path_ridge_main = soln_path[['Monthly Payments to Households with Children',
-                            'Lump-sum Payments to Households with Children',
-                            'Households with Children']]
+                            'Lump-sum Payments to Households with Children']]
 
-path_fig, ax = subplots(figsize=(8,8))
-soln_path_ridge_main.plot(ax=ax, legend=False)
-ax.set_xlabel('$-log(1/\\lambda)$', fontsize=20)
-ax.set_ylabel('Standardized coefficients', fontsize=20)
-ax.legend(loc='upper left');
 
 #Include all the variables except state and time fixed effects
 soln_path_ridge_appendix = soln_path[[
@@ -2109,12 +2103,6 @@ soln_path_ridge_appendix = soln_path[[
   "Partial Payments",
   "Lost SNAP",
   "Lost FPUC"]]
-
-path_fig, ax = subplots(figsize=(8,8))
-soln_path_ridge_appendix.plot(ax=ax, legend=False)
-ax.set_xlabel('$-log(1/\\lambda)$', fontsize=20)
-ax.set_ylabel('Standardized coefficients', fontsize=20)
-ax.legend(loc='upper left');
 
 
 #Cross-Validate (similar to code in class, but with modifications for binary)
@@ -2158,6 +2146,23 @@ ax.errorbar(-np.log(1/lambdas),  # Use lambda for x axis cuz want to follow conv
 ax.axvline(-np.log(best_C), c='k', ls='--', label='Best C')
 ax.set_xlabel('$-log(1/\\lambda)$', fontsize=20)
 ax.set_ylabel('Cross-validated MSE', fontsize=20);
+
+#Plotting the Main ridge regression with only the two variables
+path_fig, ax = subplots(figsize=(8,8))
+soln_path_ridge_main.plot(ax=ax, legend=False)
+ax.axvline(-np.log(best_C), c='k', ls='--')
+ax.set_xlabel('$-log(1/\\lambda)$', fontsize=20)
+ax.set_ylabel('Standardized coefficients', fontsize=20)
+ax.legend(loc='upper left');
+
+#Plotting the Main regression with all variables
+path_fig, ax = subplots(figsize=(8,8))
+soln_path_ridge_appendix.plot(ax=ax, legend=False)
+ax.axvline(-np.log(best_C), c='k', ls='--')
+ax.set_xlabel('$-log(1/\\lambda)$', fontsize=20)
+ax.set_ylabel('Standardized coefficients', fontsize=20)
+ax.legend(loc='upper left');
+
 
 #%%%Lasso regression----------------------------------------------------------
 # I cannot run Lasso with 229,500 observations or at least it takes a long time
@@ -2210,8 +2215,7 @@ soln_path
 
 #Keep only the main variables of interest
 soln_path_lasso_main = soln_path[['Monthly Payments to Households with Children',
-                            'Lump-sum Payments to Households with Children',
-                            'Households with Children']]
+                            'Lump-sum Payments to Households with Children']]
 
 #Plot
 path_fig, ax = subplots(figsize=(8,8))
