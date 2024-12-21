@@ -26,14 +26,14 @@ made.
 
 In the "Directed Acyclic Graph (DAG)" section, I mainly use the code from
 Week 5 and 6 Notebooks on Quercus. I make some modifications to fit with
-my project. CIDP-Chapter_04 and CIDP-Chapter_07
+my project. From CIDP-Chapter_04 and CIDP-Chapter_07
 
 In the "Machine Learning Setup (excluding DAG)", "Ridge regression" 
 I use code from the Week 3 notebooks on Quercus. But I have made some modifications to adapt to
-a binary case. ISLP-Ch06_varselect_lab
+a binary case. From ISLP-Ch06_varselect_lab
 
 In the "Classification Tree", "Random Forest", "Bagging", "Boosting" and "Classification Error rate results" I take the code from Week 4 notebooks
-on Quercus. ISLP-TreeModels
+on Quercus. From ISLP-TreeModels
 
 In the "Matching" section, I use the code from Week 7 Notebook from Quercus
 With some modifications to fit my project. It corresponds to CIDP-Chapter_09
